@@ -1,0 +1,58 @@
+---
+- name: tomcat-playbook
+  hosts: ec2_instance
+  become: true
+  gather_facts: false
+  tasks:
+      - name: cloning private repository
+        shell:
+          chdir: /home/ubuntu/
+          cmd: git clone https://{{ pat_token }}@github.com/{{ user_name }}/{{ repo_name }}.git --branch J2EE "{{ dest_dir }}"
+      - name: update repositories
+        apt:
+          update_cache: yes
+      - name: installing required java
+        apt:
+          name: openjdk-17-jdk
+          state: present
+      - name: installing mvn packages
+        apt:
+          name: maven
+          state: present
+      - name: copying debain packages for java version 18
+        copy:
+          src: ~/jdk-18_linux-x64_bin.deb
+          dest: /home/ubuntu
+          mode: 777
+          owner: root
+      - name: installing debain packages
+        shell:
+          cmd: sudo dpkg -i /home/ubuntu/jdk-18_linux-x64_bin.deb
+      - name: copy apache-tomcat tar ball
+        copy:
+          src: ~/apache-tomcat-9.0.65.tar.gz
+          dest: /home/ubuntu
+      - name: extracting tar ball
+        shell:
+          chdir: /home/ubuntu/
+          cmd: tar -xvzf apache-tomcat-9.0.65.tar.gz
+      - name: packaging war using maven
+        shell:
+          chdir: /home/ubuntu/{{ dest_dir }}
+          cmd: mvn clean install
+      - name: copying war file to webappps
+        shell:
+          chdir: /home/ubuntu/{{ dest_dir }}/target/
+          cmd: cp *.war /home/ubuntu/apache-tomcat-9.0.65/webapps/
+      - name: starting Apache-Tomcat server
+        become: yes
+        become_user: root
+        shell:  nohup /home/ubuntu/apache-tomcat-9.0.65/bin/startup.sh &
+      - name: Validating Tomcat server is up
+        wait_for:
+          host: "localhost"
+          port: 8080
+          delay: 10
+          timeout: 30
+          state: started
+          msg: "Tomcat  Server is up and running"
